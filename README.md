@@ -28,6 +28,7 @@ Features:
 * channel patterns ? See Psubscribe on redis
 * LUA function to insert/retrieve the channels data
 * Implement other channel types ?
+* CORS
 
 Production:
 
