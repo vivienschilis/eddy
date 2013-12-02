@@ -66,6 +66,7 @@ func (self *Channel) Read() (q chan string) {
 				q <- string(n.Data)
 				return
 			case error:
+				<-time.After(2 * time.Second)
 				fmt.Printf("Error:", n)
 				return
 			}
@@ -181,26 +182,11 @@ func (self *PublisherConnection) Close() error {
 
 func (self *PublisherConnection) run() {
 	for {
-		newEvent := <-self.c
-		self.SendEvent(newEvent)
+		self.SendEvent(<-self.c)
 	}
 }
 
 var eventPublisher *PublisherConnection
-
-func init() {
-	c, err := redis.Dial("tcp", ":6379")
-	if err != nil {
-		return
-	}
-
-	eventPublisher = &PublisherConnection{
-		c,
-		make(chan Event),
-	}
-
-	go eventPublisher.run()
-}
 
 type ChannelRegistry struct {
 	dict map[string]*Channel
@@ -262,4 +248,16 @@ func init() {
 	chanRegistry = &ChannelRegistry{
 		make(map[string]*Channel),
 	}
+
+	c, err := redis.Dial("tcp", ":6379")
+	if err != nil {
+		return
+	}
+
+	eventPublisher = &PublisherConnection{
+		c,
+		make(chan Event),
+	}
+
+	go eventPublisher.run()
 }
