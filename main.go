@@ -70,7 +70,7 @@ func eventSend(w http.ResponseWriter, req *http.Request) {
 func main() {
 	serverAddress := ":9001"
 	fmt.Printf("Starting app at %s\n", serverAddress)
-	http.Handle("/events", eventsource.Handler(eventHandler))
+	http.Handle("/events", GzipMiddleware(eventsource.Handler(eventHandler)))
 	http.HandleFunc("/", homePage)
 	http.HandleFunc("/send", eventSend)
 	http.ListenAndServe(serverAddress, nil)
