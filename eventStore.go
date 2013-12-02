@@ -182,7 +182,8 @@ func (self *PublisherConnection) Close() error {
 
 func (self *PublisherConnection) run() {
 	for {
-		self.SendEvent(<-self.c)
+		event := <-self.c
+		self.SendEvent(event)
 	}
 }
 
