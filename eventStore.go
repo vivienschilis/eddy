@@ -76,6 +76,8 @@ func (self *Channel) Read() (q chan string) {
 }
 
 func (self *Channel) run() {
+	defer self.psc.Close()
+
 	if err := self.psc.Subscribe(self.name); err != nil {
 		return
 	}
@@ -90,7 +92,6 @@ func (self *Channel) run() {
 		}
 	}
 	
-	self.psc.Close()
 }
 
 func (self *Channel) Close() {
