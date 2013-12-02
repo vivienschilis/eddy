@@ -13,7 +13,7 @@ var chanRegistry *ChannelRegistry
 type Channel struct {
 	name    string
 	psc     redis.PubSubConn
-	c       chan Event
+	listeners map[string]chan Event
 	closing chan bool
 	wg      sync.WaitGroup
 }
@@ -22,6 +22,7 @@ type SubscriberConnection struct {
 	id        string
 	channels  []*Channel
 	forwarder Forwarder
+	q					chan Event
 }
 
 type PublisherConnection struct {
@@ -60,6 +61,18 @@ func (self *Channel) SendHistory(q chan Event) {
 	}
 }
 
+func (self *Channel) AddListener(id string, q chan Event) {
+	self.listeners[id] = q
+	self.wg.Add(1)
+	fmt.Println("Add", self.listeners)
+}
+
+func (self *Channel) RemoveListener(id string) {
+	delete(self.listeners, id)
+	self.wg.Done()
+	fmt.Println("Remove", self.listeners)
+}
+
 func (self *Channel) Read() (q chan string) {
 	q = make(chan string)
 
@@ -95,7 +108,9 @@ func (self *Channel) run() {
 			e := Event{}
 			json.Unmarshal([]byte(msg), &e)
 			fmt.Println("Received data", e.Data)
-			self.c <- e
+			for _, listener := range self.listeners {
+				listener <- e
+			}
 		}
 	}
 
@@ -110,10 +125,11 @@ func NewSubscriberConnection(channels []string, forwarder Forwarder) (conn *Subs
 		uuid.Generate(10),
 		[]*Channel{},
 		forwarder,
+		make(chan Event),
 	}
 
 	for _, value := range channels {
-		c, err := chanRegistry.EnterChannel(value)
+		c, err := chanRegistry.EnterChannel(value, conn)
 
 		if err != nil {
 			return nil, err
@@ -127,7 +143,7 @@ func NewSubscriberConnection(channels []string, forwarder Forwarder) (conn *Subs
 
 func (self *SubscriberConnection) Close() error {
 	for _, channel := range self.channels {
-		chanRegistry.LeaveChannel(channel.name)
+		chanRegistry.LeaveChannel(channel.name, self)
 	}
 
 	msg := fmt.Sprintf("Subscription id : %s - closed", self.id)
@@ -136,32 +152,20 @@ func (self *SubscriberConnection) Close() error {
 	return nil
 }
 
-func (self *SubscriberConnection) Read(q chan Event) chan Event {
-	for _, channel := range self.channels {
-		go func(channel *Channel) {
-			event := <-channel.c
-			q <- event
-		}(channel)
-	}
-
-	return q
-}
-
 func (self *SubscriberConnection) Listen() {
 	msg := fmt.Sprintf("Subscription id : %s - connected", self.id)
 	fmt.Println(msg)
 
-	q := make(chan Event)
 	for _, channel := range self.channels {
 		fmt.Println("History")
-		go channel.SendHistory(q)
+		go channel.SendHistory(self.q)
 	}
 
 	for {
 		select {
 		case <-self.forwarder.CloseNotify():
 			return
-		case event := <-self.Read(q):
+		case  event := <- self.q:
 			self.forwarder.WriteId(event.Id)
 			self.forwarder.Write(event.Data)
 		}
@@ -201,17 +205,16 @@ type ChannelRegistry struct {
 	dict map[string]*Channel
 }
 
-func (self *ChannelRegistry) LeaveChannel(name string) {
+func (self *ChannelRegistry) LeaveChannel(name string, c *SubscriberConnection) {
 	if channel, ok := self.dict[name]; ok {
-		channel.wg.Done()
+		channel.RemoveListener(c.id)
 	}
 }
 
-func (self *ChannelRegistry) EnterChannel(name string) (channel *Channel, err error) {
+func (self *ChannelRegistry) EnterChannel(name string, c *SubscriberConnection) (channel *Channel, err error) {
 	if channel, ok := self.dict[name]; ok {
 		fmt.Println("Channel", name, "exists")
-
-		channel.wg.Add(1)
+		channel.AddListener(c.id, c.q)
 		return channel, nil
 	}
 
@@ -222,7 +225,7 @@ func (self *ChannelRegistry) EnterChannel(name string) (channel *Channel, err er
 		return nil, err
 	}
 
-	channel.wg.Add(1)
+	channel.AddListener(c.id, c.q)
 	self.dict[name] = channel
 
 	go channel.run()
@@ -246,7 +249,7 @@ func (self *ChannelRegistry) NewChannel(name string) (eventChannel *Channel, err
 	eventChannel = &Channel{
 		name:    name,
 		psc:     redis.PubSubConn{Conn: c},
-		c:       make(chan Event),
+		listeners: map[string]chan Event{},
 		closing: make(chan bool),
 	}
 
