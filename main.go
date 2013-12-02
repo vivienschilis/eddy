@@ -32,7 +32,7 @@ const homepageHtml = `
 `
 
 type HomepageParams struct {
-  Channels string
+	Channels string
 }
 
 var homepageTemplate = template.Must(template.New("home").Parse(homepageHtml))
@@ -43,8 +43,8 @@ func eventHandler(es *eventsource.Conn, channels []string) {
 		es.Write(err.Error())
 		return
 	}
-  
-  defer sc.Close()
+
+	defer sc.Close()
 
 	fmt.Println("Client connected.")
 
@@ -55,7 +55,7 @@ func eventHandler(es *eventsource.Conn, channels []string) {
 }
 
 func homePage(w http.ResponseWriter, req *http.Request) {
-  channels := req.URL.Query().Get("channels")
+	channels := req.URL.Query().Get("channels")
 	homepageTemplate.Execute(w, HomepageParams{channels})
 }
 

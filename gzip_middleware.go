@@ -54,8 +54,8 @@ func (self *gzipMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 type gzipResponseWriter struct {
 	gz *gzip.Writer
-	w http.ResponseWriter
-	f http.Flusher
+	w  http.ResponseWriter
+	f  http.Flusher
 	cn http.CloseNotifier
 }
 

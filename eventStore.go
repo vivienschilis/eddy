@@ -4,22 +4,22 @@ import (
 	"fmt"
 	"github.com/garyburd/redigo/redis"
 	"log"
-	"time"
 	"sync"
+	"time"
 )
 
 var chanRegistry *ChannelRegistry
 
 type Channel struct {
-	name string
-	psc  redis.PubSubConn
-	c    chan Event
+	name    string
+	psc     redis.PubSubConn
+	c       chan Event
 	closing chan bool
 	wg      sync.WaitGroup
 }
 
 type SubscriberConnection struct {
-	id				string
+	id        string
 	channels  []*Channel
 	forwarder Forwarder
 }
@@ -40,20 +40,20 @@ type Event struct {
 }
 
 func (self *Channel) SendHistory(q chan Event) {
-		conn, err := redis.Dial("tcp", ":6379")
-		if err != nil {
-			return
-		}
-		defer conn.Close()
+	conn, err := redis.Dial("tcp", ":6379")
+	if err != nil {
+		return
+	}
+	defer conn.Close()
 
-		n, err := redis.Values(conn.Do("ZRANGE", self.name, 0, -1))
-	  if err != nil {
-	    return
-	  }
+	n, err := redis.Values(conn.Do("ZRANGE", self.name, 0, -1))
+	if err != nil {
+		return
+	}
 
-	  for _, x := range n {
-	    q <- Event{self.name, string(x.([]byte))}
-	  }
+	for _, x := range n {
+		q <- Event{self.name, string(x.([]byte))}
+	}
 }
 
 func (self *Channel) Read() (q chan string) {
@@ -91,14 +91,14 @@ func (self *Channel) run() {
 			self.c <- Event{self.name, msg}
 		}
 	}
-	
+
 }
 
 func (self *Channel) Close() {
 	self.closing <- true
 }
 
-func NewSubscriberConnection(channels []string, forwarder Forwarder) (conn *SubscriberConnection, err error) { 
+func NewSubscriberConnection(channels []string, forwarder Forwarder) (conn *SubscriberConnection, err error) {
 	conn = &SubscriberConnection{
 		uuid.Generate(10),
 		[]*Channel{},
@@ -122,19 +122,19 @@ func (self *SubscriberConnection) Close() error {
 	for _, channel := range self.channels {
 		chanRegistry.LeaveChannel(channel.name)
 	}
-	
+
 	msg := fmt.Sprintf("Subscription id : %s - closed", self.id)
 	fmt.Println(msg)
 
 	return nil
 }
 
-func (self *SubscriberConnection) Read(q chan Event) (chan Event) {
+func (self *SubscriberConnection) Read(q chan Event) chan Event {
 	for _, channel := range self.channels {
-			go func(channel *Channel) {
-				event := <-channel.c
-				q <- event
-			}(channel)
+		go func(channel *Channel) {
+			event := <-channel.c
+			q <- event
+		}(channel)
 	}
 
 	return q
@@ -154,7 +154,7 @@ func (self *SubscriberConnection) Listen() {
 		select {
 		case <-self.forwarder.CloseNotify():
 			return
-		case event := <- self.Read(q):
+		case event := <-self.Read(q):
 			msg := fmt.Sprintf("Message: %s %s\n", event.Channel, event.Data)
 			self.forwarder.Write(msg)
 		}
@@ -202,23 +202,22 @@ func init() {
 	go eventPublisher.run()
 }
 
-
 type ChannelRegistry struct {
-	dict  map[string]*Channel
+	dict map[string]*Channel
 }
 
 func (self *ChannelRegistry) LeaveChannel(name string) {
-	if channel,ok := self.dict[name]; ok {
+	if channel, ok := self.dict[name]; ok {
 		channel.wg.Done()
 	}
 }
 
 func (self *ChannelRegistry) EnterChannel(name string) (channel *Channel, err error) {
-	if channel,ok := self.dict[name]; ok {
+	if channel, ok := self.dict[name]; ok {
 		fmt.Println("Channel", name, "exists")
 
 		channel.wg.Add(1)
-    return channel, nil
+		return channel, nil
 	}
 
 	channel, err = self.NewChannel(name)
@@ -235,15 +234,15 @@ func (self *ChannelRegistry) EnterChannel(name string) (channel *Channel, err er
 
 	go func(c *Channel) {
 		c.wg.Wait()
-		fmt.Println("Close Channel \"", c.name, "\"")
 		delete(self.dict, c.name)
+		fmt.Println("Close Channel \"", c.name, "\"")
 		c.Close()
 	}(channel)
 
 	return channel, nil
 }
 
-func(self *ChannelRegistry) NewChannel(name string) (eventChannel *Channel, err error) {
+func (self *ChannelRegistry) NewChannel(name string) (eventChannel *Channel, err error) {
 	c, err := redis.Dial("tcp", ":6379")
 	if err != nil {
 		return
@@ -259,7 +258,7 @@ func(self *ChannelRegistry) NewChannel(name string) (eventChannel *Channel, err 
 	return
 }
 
-func init(){
+func init() {
 	chanRegistry = &ChannelRegistry{
 		make(map[string]*Channel),
 	}
