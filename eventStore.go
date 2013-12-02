@@ -30,6 +30,7 @@ type PublisherConnection struct {
 }
 
 type Forwarder interface {
+	WriteId(id int64)
 	Write(msg string)
 	CloseNotify() <-chan bool
 }
@@ -93,6 +94,7 @@ func (self *Channel) run() {
 		case msg := <-self.Read():
 			e := Event{}
 			json.Unmarshal([]byte(msg), &e)
+			fmt.Println("Received data", e.Data)
 			self.c <- e
 		}
 	}
@@ -160,8 +162,8 @@ func (self *SubscriberConnection) Listen() {
 		case <-self.forwarder.CloseNotify():
 			return
 		case event := <-self.Read(q):
-			msg := fmt.Sprintf("Message: %s %s\n", event.Channel, event.Data)
-			self.forwarder.Write(msg)
+			self.forwarder.WriteId(event.Id)
+			self.forwarder.Write(event.Data)
 		}
 	}
 }

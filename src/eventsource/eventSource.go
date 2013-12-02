@@ -31,6 +31,12 @@ func (c Conn) Write(message string) {
 	c.Flush()
 }
 
+func (c Conn) WriteId(id int64) {
+	c.writer.Write([]byte(fmt.Sprintf("id: %d", id)))
+	c.writer.Write([]byte("\n"))
+	c.Flush()
+}
+
 type Handler func(*Conn, []string)
 
 func (h Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
