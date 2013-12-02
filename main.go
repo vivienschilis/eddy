@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"time"
 )
 
 const homepageHtml = `
@@ -63,7 +64,8 @@ func eventSend(w http.ResponseWriter, req *http.Request) {
 	channel := req.URL.Query().Get("channel")
 	data := req.URL.Query().Get("data")
 
-	eventPublisher.c <- Event{channel, data}
+	timestamp := time.Now().Unix()
+	eventPublisher.c <- Event{timestamp, channel, data}
 	w.WriteHeader(201)
 }
 

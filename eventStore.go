@@ -1,11 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/garyburd/redigo/redis"
 	"log"
 	"sync"
-	"time"
 )
 
 var chanRegistry *ChannelRegistry
@@ -35,8 +35,9 @@ type Forwarder interface {
 }
 
 type Event struct {
-	Channel string
-	Data    string
+	Id      int64  `json:"id"`
+	Channel string `json:"name"`
+	Data    string `json:"data"`
 }
 
 func (self *Channel) SendHistory(q chan Event) {
@@ -52,7 +53,9 @@ func (self *Channel) SendHistory(q chan Event) {
 	}
 
 	for _, x := range n {
-		q <- Event{self.name, string(x.([]byte))}
+		var e Event
+		json.Unmarshal(x.([]byte), &e)
+		q <- e
 	}
 }
 
@@ -66,7 +69,6 @@ func (self *Channel) Read() (q chan string) {
 				q <- string(n.Data)
 				return
 			case error:
-				<-time.After(2 * time.Second)
 				fmt.Printf("Error:", n)
 				return
 			}
@@ -89,7 +91,9 @@ func (self *Channel) run() {
 			fmt.Println("Channel", self.name, "Closed")
 			return
 		case msg := <-self.Read():
-			self.c <- Event{self.name, msg}
+			e := Event{}
+			json.Unmarshal([]byte(msg), &e)
+			self.c <- e
 		}
 	}
 
@@ -166,13 +170,15 @@ const BUF_EXPIRE = 3600
 const BUF_SIZE = 10
 
 func (self *PublisherConnection) SendEvent(event Event) {
-	timestamp := time.Now().Unix()
 
 	// TODO: Error checking
-	self.redis.Do("ZADD", event.Channel, timestamp, event.Data)
+	b, _ := json.Marshal(event)
+	data := fmt.Sprintf("%s", b)
+
+	self.redis.Do("ZADD", event.Channel, event.Id, data)
 	self.redis.Do("ZREMRANGEBYRANK", event.Channel, BUF_SIZE, -1)
 	self.redis.Do("EXPIRE", event.Channel, BUF_EXPIRE)
-	self.redis.Do("PUBLISH", event.Channel, event.Data)
+	self.redis.Do("PUBLISH", event.Channel, data)
 }
 
 func (self *PublisherConnection) Close() error {
