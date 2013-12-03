@@ -72,9 +72,12 @@ func eventSend(w http.ResponseWriter, req *http.Request) {
 
 func main() {
 	serverAddress := ":9001"
+	redisAddr := ":6379"
+
+	op := NewMultiplexer(redisAddr)
 
 	mux := http.NewServeMux()
-	mux.Handle("/events", eventsource.Handler(eventHandler))
+	mux.Handle("/events", NewSubscriberHandler(op))
 	mux.HandleFunc("/", homePage)
 	mux.HandleFunc("/send", eventSend)
 
