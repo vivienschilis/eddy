@@ -182,7 +182,7 @@ func (self *PublisherConnection) SendEvent(event Event) {
 	data := fmt.Sprintf("%s", b)
 
 	self.redis.Do("ZADD", event.Channel, -1*event.Id, data)
-	self.redis.Do("ZREMRANGEBYRANK", event.Channel, 10, -1)
+	self.redis.Do("ZREMRANGEBYRANK", event.Channel, BUF_SIZE, -1)
 	self.redis.Do("EXPIRE", event.Channel, BUF_EXPIRE)
 	self.redis.Do("PUBLISH", event.Channel, data)
 }
