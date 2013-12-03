@@ -63,8 +63,8 @@ func homePage(w http.ResponseWriter, req *http.Request) {
 func eventSend(w http.ResponseWriter, req *http.Request) {
 	channel := req.URL.Query().Get("channel")
 	data := req.URL.Query().Get("data")
-
 	timestamp := time.Now().UnixNano()
+
 	eventPublisher.q <- Event{timestamp, channel, data}
 	w.WriteHeader(201)
 }

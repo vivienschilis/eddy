@@ -5,24 +5,13 @@ import (
 	"fmt"
 	"github.com/garyburd/redigo/redis"
 	"log"
-	"sync"
 )
-
-var chanRegistry *ChannelRegistry
-
-type Channel struct {
-	name    string
-	psc     redis.PubSubConn
-	listeners map[string]chan Event
-	closing chan bool
-	wg      sync.WaitGroup
-}
 
 type SubscriberConnection struct {
 	id        string
 	channels  []*Channel
 	forwarder Forwarder
-	q					chan Event
+	q         chan Event
 }
 
 type PublisherConnection struct {
@@ -40,84 +29,6 @@ type Event struct {
 	Id      int64  `json:"id"`
 	Channel string `json:"name"`
 	Data    string `json:"data"`
-}
-
-func (self *Channel) SendHistory(q chan Event) {
-	conn, err := redis.Dial("tcp", ":6379")
-	if err != nil {
-		return
-	}
-	defer conn.Close()
-
-	n, err := redis.Values(conn.Do("ZREVRANGE", self.name, 0, -1))
-	if err != nil {
-		return
-	}
-
-	for _, x := range n {
-		var e Event
-		json.Unmarshal(x.([]byte), &e)
-		q <- e
-	}
-}
-
-func (self *Channel) AddListener(id string, q chan Event) {
-	self.listeners[id] = q
-	self.wg.Add(1)
-	fmt.Println("Add", self.listeners)
-}
-
-func (self *Channel) RemoveListener(id string) {
-	delete(self.listeners, id)
-	self.wg.Done()
-	fmt.Println("Remove", self.listeners)
-}
-
-func (self *Channel) Read() (q chan string) {
-	q = make(chan string)
-
-	go func() {
-		for {
-			switch n := self.psc.Receive().(type) {
-			case redis.Message:
-				q <- string(n.Data)
-				return
-			case error:
-				fmt.Printf("Error:", n)
-				return
-			}
-		}
-	}()
-
-	return q
-}
-
-func (self *Channel) run() {
-	defer self.psc.Close()
-
-	if err := self.psc.Subscribe(self.name); err != nil {
-		return
-	}
-
-	for {
-		select {
-		case <-self.closing:
-			fmt.Println("Channel", self.name, "Closed")
-			return
-		case msg := <-self.Read():
-			e := Event{}
-			json.Unmarshal([]byte(msg), &e)
-			fmt.Println("Received data", e.Data)
-			for _, listener := range self.listeners {
-				listener <- e
-			}
-		}
-	}
-
-}
-
-func (self *Channel) Close() {
-	self.closing <- true
 }
 
 func NewSubscriberConnection(channels []string, forwarder Forwarder) (conn *SubscriberConnection, err error) {
@@ -157,15 +68,14 @@ func (self *SubscriberConnection) Listen() {
 	fmt.Println(msg)
 
 	for _, channel := range self.channels {
-		fmt.Println("History")
-		go channel.SendHistory(self.q)
+		go channel.SendHistory(self.id)
 	}
 
 	for {
 		select {
 		case <-self.forwarder.CloseNotify():
 			return
-		case  event := <- self.q:
+		case event := <-self.q:
 			self.forwarder.WriteId(event.Id)
 			self.forwarder.Write(event.Data)
 		}
@@ -201,66 +111,7 @@ func (self *PublisherConnection) run() {
 
 var eventPublisher *PublisherConnection
 
-type ChannelRegistry struct {
-	dict map[string]*Channel
-}
-
-func (self *ChannelRegistry) LeaveChannel(name string, c *SubscriberConnection) {
-	if channel, ok := self.dict[name]; ok {
-		channel.RemoveListener(c.id)
-	}
-}
-
-func (self *ChannelRegistry) EnterChannel(name string, c *SubscriberConnection) (channel *Channel, err error) {
-	if channel, ok := self.dict[name]; ok {
-		fmt.Println("Channel", name, "exists")
-		channel.AddListener(c.id, c.q)
-		return channel, nil
-	}
-
-	channel, err = self.NewChannel(name)
-	fmt.Println("Open new Channel \"", channel.name, "\"")
-
-	if err != nil {
-		return nil, err
-	}
-
-	channel.AddListener(c.id, c.q)
-	self.dict[name] = channel
-
-	go channel.run()
-
-	go func(c *Channel) {
-		c.wg.Wait()
-		delete(self.dict, c.name)
-		fmt.Println("Close Channel \"", c.name, "\"")
-		c.Close()
-	}(channel)
-
-	return channel, nil
-}
-
-func (self *ChannelRegistry) NewChannel(name string) (eventChannel *Channel, err error) {
-	c, err := redis.Dial("tcp", ":6379")
-	if err != nil {
-		return
-	}
-
-	eventChannel = &Channel{
-		name:    name,
-		psc:     redis.PubSubConn{Conn: c},
-		listeners: map[string]chan Event{},
-		closing: make(chan bool),
-	}
-
-	return
-}
-
 func init() {
-	chanRegistry = &ChannelRegistry{
-		make(map[string]*Channel),
-	}
-
 	c, err := redis.Dial("tcp", ":6379")
 	if err != nil {
 		return
