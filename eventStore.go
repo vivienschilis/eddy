@@ -27,7 +27,7 @@ type SubscriberConnection struct {
 
 type PublisherConnection struct {
 	redis redis.Conn
-	c     chan Event
+	q     chan Event
 }
 
 type Forwarder interface {
@@ -49,7 +49,7 @@ func (self *Channel) SendHistory(q chan Event) {
 	}
 	defer conn.Close()
 
-	n, err := redis.Values(conn.Do("ZRANGE", self.name, 0, -1))
+	n, err := redis.Values(conn.Do("ZREVRANGE", self.name, 0, -1))
 	if err != nil {
 		return
 	}
@@ -181,8 +181,8 @@ func (self *PublisherConnection) SendEvent(event Event) {
 	b, _ := json.Marshal(event)
 	data := fmt.Sprintf("%s", b)
 
-	self.redis.Do("ZADD", event.Channel, event.Id, data)
-	self.redis.Do("ZREMRANGEBYRANK", event.Channel, BUF_SIZE, -1)
+	self.redis.Do("ZADD", event.Channel, -1*event.Id, data)
+	self.redis.Do("ZREMRANGEBYRANK", event.Channel, 10, -1)
 	self.redis.Do("EXPIRE", event.Channel, BUF_EXPIRE)
 	self.redis.Do("PUBLISH", event.Channel, data)
 }
@@ -194,7 +194,7 @@ func (self *PublisherConnection) Close() error {
 
 func (self *PublisherConnection) run() {
 	for {
-		event := <-self.c
+		event := <-self.q
 		self.SendEvent(event)
 	}
 }

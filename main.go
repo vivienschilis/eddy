@@ -65,7 +65,7 @@ func eventSend(w http.ResponseWriter, req *http.Request) {
 	data := req.URL.Query().Get("data")
 
 	timestamp := time.Now().Unix()
-	eventPublisher.c <- Event{timestamp, channel, data}
+	eventPublisher.q <- Event{timestamp, channel, data}
 	w.WriteHeader(201)
 }
 
