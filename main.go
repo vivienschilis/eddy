@@ -4,6 +4,7 @@ import (
 	"eventsource"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"time"
 )
@@ -71,9 +72,20 @@ func eventSend(w http.ResponseWriter, req *http.Request) {
 
 func main() {
 	serverAddress := ":9001"
+
+	mux := http.NewServeMux()
+	mux.Handle("/events", eventsource.Handler(eventHandler))
+	mux.HandleFunc("/", homePage)
+	mux.HandleFunc("/send", eventSend)
+
+	s := &http.Server{
+		Addr:           serverAddress,
+		Handler:        mux,
+		ReadTimeout:    10 * time.Second,
+		WriteTimeout:   10 * time.Second,
+		MaxHeaderBytes: 1 << 20,
+	}
+
 	fmt.Printf("Starting app at %s\n", serverAddress)
-	http.Handle("/events", GzipMiddleware(eventsource.Handler(eventHandler)))
-	http.HandleFunc("/", homePage)
-	http.HandleFunc("/send", eventSend)
-	http.ListenAndServe(serverAddress, nil)
+	log.Fatal(s.ListenAndServe())
 }
