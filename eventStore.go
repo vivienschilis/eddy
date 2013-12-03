@@ -25,12 +25,6 @@ type Forwarder interface {
 	CloseNotify() <-chan bool
 }
 
-type Event struct {
-	Id      int64  `json:"id"`
-	Channel string `json:"name"`
-	Data    string `json:"data"`
-}
-
 func NewSubscriberConnection(channels []string, forwarder Forwarder) (conn *SubscriberConnection, err error) {
 	conn = &SubscriberConnection{
 		uuid.Generate(10),
