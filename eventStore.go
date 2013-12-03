@@ -7,73 +7,9 @@ import (
 	"log"
 )
 
-type SubscriberConnection struct {
-	id        string
-	channels  []*Channel
-	forwarder Forwarder
-	q         chan Event
-}
-
 type PublisherConnection struct {
 	redis redis.Conn
 	q     chan Event
-}
-
-type Forwarder interface {
-	WriteId(id int64)
-	Write(msg string)
-	CloseNotify() <-chan bool
-}
-
-func NewSubscriberConnection(channels []string, forwarder Forwarder) (conn *SubscriberConnection, err error) {
-	conn = &SubscriberConnection{
-		uuid.Generate(10),
-		[]*Channel{},
-		forwarder,
-		make(chan Event),
-	}
-
-	for _, value := range channels {
-		c, err := chanRegistry.EnterChannel(value, conn)
-
-		if err != nil {
-			return nil, err
-		}
-
-		conn.channels = append(conn.channels, c)
-	}
-
-	return conn, nil
-}
-
-func (self *SubscriberConnection) Close() error {
-	for _, channel := range self.channels {
-		chanRegistry.LeaveChannel(channel.name, self)
-	}
-
-	msg := fmt.Sprintf("Subscription id : %s - closed", self.id)
-	fmt.Println(msg)
-
-	return nil
-}
-
-func (self *SubscriberConnection) Listen() {
-	msg := fmt.Sprintf("Subscription id : %s - connected", self.id)
-	fmt.Println(msg)
-
-	for _, channel := range self.channels {
-		go channel.SendHistory(self.id)
-	}
-
-	for {
-		select {
-		case <-self.forwarder.CloseNotify():
-			return
-		case event := <-self.q:
-			self.forwarder.WriteId(event.Id)
-			self.forwarder.Write(event.Data)
-		}
-	}
 }
 
 const BUF_EXPIRE = 3600

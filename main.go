@@ -1,7 +1,6 @@
 package main
 
 import (
-	"eventsource"
 	"fmt"
 	"html/template"
 	"log"
@@ -38,23 +37,6 @@ type HomepageParams struct {
 }
 
 var homepageTemplate = template.Must(template.New("home").Parse(homepageHtml))
-
-func eventHandler(es *eventsource.Conn, channels []string) {
-	sc, err := NewSubscriberConnection(channels, es)
-	if err != nil {
-		es.Write(err.Error())
-		return
-	}
-
-	defer sc.Close()
-
-	fmt.Println("Client connected.")
-
-	sc.Listen()
-
-	fmt.Println("Client went away.")
-	return
-}
 
 func homePage(w http.ResponseWriter, req *http.Request) {
 	channels := req.URL.Query().Get("channels")
