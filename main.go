@@ -40,6 +40,9 @@ var homepageTemplate = template.Must(template.New("home").Parse(homepageHtml))
 
 func homePage(w http.ResponseWriter, req *http.Request) {
 	channels := req.URL.Query().Get("channels")
+	if len(channels) == 0 {
+		channels = "foo,bar"
+	}
 	homepageTemplate.Execute(w, HomepageParams{channels})
 }
 
