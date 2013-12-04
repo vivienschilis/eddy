@@ -46,15 +46,6 @@ func homePage(w http.ResponseWriter, req *http.Request) {
 	homepageTemplate.Execute(w, HomepageParams{channels})
 }
 
-func eventSend(w http.ResponseWriter, req *http.Request) {
-	channel := req.URL.Query().Get("channel")
-	data := req.URL.Query().Get("data")
-	timestamp := time.Now().UnixNano()
-
-	eventPublisher.q <- &Event{timestamp, channel, data}
-	w.WriteHeader(201)
-}
-
 func main() {
 	serverAddress := ":9001"
 	redisAddr := ":6379"
@@ -64,7 +55,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/events", NewSubscriberHandler(op))
 	mux.HandleFunc("/", homePage)
-	mux.HandleFunc("/send", eventSend)
+	mux.Handle("/send", NewPublisherHandler(redisAddr))
 
 	s := &http.Server{
 		Addr:           serverAddress,

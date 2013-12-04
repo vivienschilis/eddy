@@ -1,56 +1,61 @@
 package main
 
 import (
-	"fmt"
 	"github.com/garyburd/redigo/redis"
 	"log"
+	"net/http"
+	"time"
 )
 
-type PublisherConnection struct {
-	redis redis.Conn
-	q     chan *Event
+type PublisherHandler struct {
+	redisAddr string
 }
 
 const BUF_EXPIRE = 3600
 const BUF_SIZE = 10
 
-func (self *PublisherConnection) SendEvent(event *Event) {
-
-	// TODO: Error checking
-	b, _ := DumpEvent(event)
-	data := fmt.Sprintf("%s", b)
-
-	// TODO: Error checking
-	self.redis.Do("ZADD", event.Channel, -1*event.Id, data)
-	self.redis.Do("ZREMRANGEBYRANK", event.Channel, BUF_SIZE, -1)
-	self.redis.Do("EXPIRE", event.Channel, BUF_EXPIRE)
-	self.redis.Do("PUBLISH", event.Channel, data)
+func NewPublisherHandler(redisAddr string) *PublisherHandler {
+	return &PublisherHandler{redisAddr}
 }
 
-func (self *PublisherConnection) Close() error {
-	log.Println("Publisher Close")
-	return self.redis.Close()
-}
+func (self *PublisherHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	var err error
 
-func (self *PublisherConnection) run() {
-	for {
-		event := <-self.q
-		self.SendEvent(event)
-	}
-}
+	channel := req.URL.Query().Get("channel")
+	data := req.URL.Query().Get("data")
+	timestamp := time.Now().UnixNano()
+	// TODO: Fail if we don't have any channel or data
 
-var eventPublisher *PublisherConnection
-
-func init() {
 	c, err := redis.Dial("tcp", ":6379")
 	if err != nil {
+		log.Println("publisher: ", err)
+		w.WriteHeader(500)
+		return
+	}
+	defer c.Close()
+
+	err = sendEvent(c, &Event{timestamp, channel, data})
+	if err != nil {
+		log.Println("publisher: ", err)
+		w.WriteHeader(500)
 		return
 	}
 
-	eventPublisher = &PublisherConnection{
-		c,
-		make(chan *Event),
-	}
+	w.WriteHeader(201)
+}
 
-	go eventPublisher.run()
+func sendEvent(c redis.Conn, event *Event) (err error) {
+	b, err := DumpEvent(event)
+	if err != nil {
+		return
+	}
+	data := []byte(b)
+
+	// TODO: Error checking
+	c.Do("ZADD", event.Channel, -1*event.Id, data)
+	c.Do("ZREMRANGEBYRANK", event.Channel, BUF_SIZE, -1)
+	c.Do("EXPIRE", event.Channel, BUF_EXPIRE)
+	c.Do("PUBLISH", event.Channel, data)
+
+	return nil
 }
