@@ -47,7 +47,7 @@ func homePage(w http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
-	serverAddress := ":9001"
+	serverAddr := ":9001"
 	redisAddr := ":6379"
 
 	op := NewMultiplexer(redisAddr)
@@ -58,13 +58,13 @@ func main() {
 	mux.Handle("/send", NewPublisherHandler(redisAddr))
 
 	s := &http.Server{
-		Addr:           serverAddress,
+		Addr:           serverAddr,
 		Handler:        mux,
-		ReadTimeout:    10 * time.Second,
+		ReadTimeout:    20 * time.Second,
 		WriteTimeout:   10 * time.Second,
 		MaxHeaderBytes: 1 << 20,
 	}
 
-	fmt.Printf("Starting app at %s\n", serverAddress)
+	fmt.Printf("Starting app at %s\n", serverAddr)
 	log.Fatal(s.ListenAndServe())
 }

@@ -10,6 +10,9 @@ import (
 var DATA_HEADER = []byte("data: ")
 var END_OF_MESSAGE = []byte("\n\n")
 
+// HACK: There is no true noop in the spec
+var NOOP = []byte("\n")
+
 type SubscriberHandler struct {
 	multiplexer chan<- Op
 }
@@ -20,11 +23,16 @@ type SubscriberConn struct {
 	http.CloseNotifier
 }
 
-func (c SubscriberConn) Write(data []byte) {
+func (c SubscriberConn) SendData(data []byte) {
 	// TODO: Handle errors ?
 	c.writer.Write(DATA_HEADER)
 	c.writer.Write(data)
 	c.writer.Write(END_OF_MESSAGE)
+	c.Flush()
+}
+
+func (c SubscriberConn) SendNoop() {
+	c.writer.Write(NOOP)
 	c.Flush()
 }
 
@@ -74,13 +82,14 @@ func (self *SubscriberHandler) ServeHTTP(w http.ResponseWriter, req *http.Reques
 					log.Println("subscriber:", err)
 				} else {
 					// TODO: Handle error
-					conn.Write(data)
+					conn.SendData(data)
 				}
 			case <-conn.CloseNotify():
 				self.multiplexer <- Op{DISCONNECT, channels, resp}
 				closed = true
 			case <-time.After(5 * time.Second):
 				// Send a little noop to the client
+				conn.SendNoop()
 			}
 		}
 	}
