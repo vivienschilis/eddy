@@ -1,4 +1,4 @@
 export GOPATH=$(PWD)
 
-edvents: *.go
+eddy: *.go
 	go build -o $@
