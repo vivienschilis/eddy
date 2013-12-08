@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/zimbatm/httputil2"
 	"html/template"
 	"log"
 	"net/http"
@@ -47,6 +48,8 @@ func homePage(w http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
+	var h http.Handler
+
 	serverAddr := ":9001"
 	redisAddr := ":6379"
 
@@ -57,9 +60,11 @@ func main() {
 	mux.HandleFunc("/", homePage)
 	mux.Handle("/send", NewPublisherHandler(redisAddr))
 
+	h = httputil2.GzipHandler(mux)
+
 	s := &http.Server{
 		Addr:           serverAddr,
-		Handler:        mux,
+		Handler:        h,
 		ReadTimeout:    20 * time.Second,
 		WriteTimeout:   10 * time.Second,
 		MaxHeaderBytes: 1 << 20,
