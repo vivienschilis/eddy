@@ -10,6 +10,10 @@ type Event struct {
 	Data    string `json:"data"`
 }
 
+func NewEvent(id int64, channel string, data string) *Event {
+	return &Event{id, channel, data}
+}
+
 func LoadEvent(data []byte) (e *Event, err error) {
 	e = new(Event)
 	err = json.Unmarshal(data, e)
