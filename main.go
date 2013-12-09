@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -61,6 +62,11 @@ func main() {
 	mux.Handle("/send", NewPublisherHandler(redisAddr))
 
 	h = httputil2.GzipHandler(mux)
+	h = httputil2.LogHandler(
+		h,
+		os.Stdout,
+		httputil2.CommonLogFormatter(httputil2.CommonLogFormat),
+	)
 
 	s := &http.Server{
 		Addr:           serverAddr,
