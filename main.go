@@ -54,12 +54,13 @@ func main() {
 	serverAddr := ":9001"
 	redisAddr := ":6379"
 
+	b := NewRedisBroker(redisAddr)
 	op := NewMultiplexer(redisAddr)
 
 	mux := http.NewServeMux()
-	mux.Handle("/events", NewSubscriberHandler(op))
 	mux.HandleFunc("/", homePage)
-	mux.Handle("/send", NewPublisherHandler(redisAddr))
+	mux.Handle("/events", NewSubscriberHandler(op))
+	mux.Handle("/send", NewPublisherHandler(b))
 
 	h = httputil2.GzipHandler(mux)
 	h = httputil2.LogHandler(

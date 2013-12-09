@@ -61,7 +61,7 @@ func (self *SubscriberHandler) ServeHTTP(w http.ResponseWriter, req *http.Reques
 	conn := SubscriberConn{w, f, cn}
 	resp := make(chan *Event)
 
-	self.multiplexer <- Op{CONNECT, channels, resp}
+	self.multiplexer <- Op{CLIENT_CONNECT, channels, resp}
 
 	for {
 		if closed {
@@ -85,7 +85,7 @@ func (self *SubscriberHandler) ServeHTTP(w http.ResponseWriter, req *http.Reques
 					conn.SendData(data)
 				}
 			case <-conn.CloseNotify():
-				self.multiplexer <- Op{DISCONNECT, channels, resp}
+				self.multiplexer <- Op{CLIENT_DISCONNECT, channels, resp}
 				closed = true
 			case <-time.After(5 * time.Second):
 				// Send a little noop to the client

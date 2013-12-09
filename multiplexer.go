@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	CONNECT = iota
-	DISCONNECT
+	CLIENT_CONNECT = iota
+	CLIENT_DISCONNECT
 	// TODO: See if this state is useful
 	QUIT
 )
@@ -81,7 +81,7 @@ func multiplexer(redisAddr string, comm <-chan Op) {
 			select {
 			case op = <-comm:
 				switch op.action {
-				case CONNECT:
+				case CLIENT_CONNECT:
 					log.Println("multiplexer: CONNECT", op)
 					for _, c := range op.channels {
 						_, ok := registry[c]
@@ -114,7 +114,7 @@ func multiplexer(redisAddr string, comm <-chan Op) {
 							}
 						}
 					}
-				case DISCONNECT:
+				case CLIENT_DISCONNECT:
 					log.Println("multiplexer: DISCONNECT", op)
 					for _, c := range op.channels {
 						if registry[c] == nil {
