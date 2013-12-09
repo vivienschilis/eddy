@@ -1,10 +1,12 @@
 package main
 
 import (
-	"eventsource"
 	"fmt"
+	"github.com/zimbatm/httputil2"
 	"html/template"
+	"log"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -38,42 +40,43 @@ type HomepageParams struct {
 
 var homepageTemplate = template.Must(template.New("home").Parse(homepageHtml))
 
-func eventHandler(es *eventsource.Conn, channels []string) {
-	sc, err := NewSubscriberConnection(channels, es)
-	if err != nil {
-		es.Write(err.Error())
-		return
-	}
-
-	defer sc.Close()
-
-	fmt.Println("Client connected.")
-
-	sc.Listen()
-
-	fmt.Println("Client went away.")
-	return
-}
-
 func homePage(w http.ResponseWriter, req *http.Request) {
 	channels := req.URL.Query().Get("channels")
+	if len(channels) == 0 {
+		channels = "foo,bar"
+	}
 	homepageTemplate.Execute(w, HomepageParams{channels})
 }
 
-func eventSend(w http.ResponseWriter, req *http.Request) {
-	channel := req.URL.Query().Get("channel")
-	data := req.URL.Query().Get("data")
-	timestamp := time.Now().UnixNano()
-
-	eventPublisher.q <- Event{timestamp, channel, data}
-	w.WriteHeader(201)
-}
-
 func main() {
-	serverAddress := ":9001"
-	fmt.Printf("Starting app at %s\n", serverAddress)
-	http.Handle("/events", GzipMiddleware(eventsource.Handler(eventHandler)))
-	http.HandleFunc("/", homePage)
-	http.HandleFunc("/send", eventSend)
-	http.ListenAndServe(serverAddress, nil)
+	var h http.Handler
+
+	serverAddr := ":9001"
+	redisAddr := ":6379"
+
+	b := NewRedisBroker(redisAddr)
+	op := NewMultiplexer(redisAddr)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", homePage)
+	mux.Handle("/events", NewSubscriberHandler(op))
+	mux.Handle("/send", NewPublisherHandler(b))
+
+	h = httputil2.GzipHandler(mux)
+	h = httputil2.LogHandler(
+		h,
+		os.Stdout,
+		httputil2.CommonLogFormatter(httputil2.CommonLogFormat),
+	)
+
+	s := &http.Server{
+		Addr:           serverAddr,
+		Handler:        h,
+		ReadTimeout:    20 * time.Second,
+		WriteTimeout:   10 * time.Second,
+		MaxHeaderBytes: 1 << 20,
+	}
+
+	fmt.Printf("Starting app at %s\n", serverAddr)
+	log.Fatal(s.ListenAndServe())
 }
