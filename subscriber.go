@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -24,7 +23,8 @@ type SubscriberConn struct {
 }
 
 func (c SubscriberConn) SendData(data []byte) {
-	// TODO: Handle errors ?
+	// Ignoring errors here. We should get a CloseNotify event soon anyways.
+	// Or are there other classes of events ?
 	c.writer.Write(DATA_HEADER)
 	c.writer.Write(data)
 	c.writer.Write(END_OF_MESSAGE)
@@ -57,39 +57,33 @@ func (self *SubscriberHandler) ServeHTTP(w http.ResponseWriter, req *http.Reques
 	w.WriteHeader(200)
 
 	channels := strings.Split(req.URL.Query().Get("channels"), ",") // TODO: Fail if no channels are selected ?
-	closed := false
+	connected := true
 	conn := SubscriberConn{w, f, cn}
 	resp := make(chan *Event)
 
 	self.multiplexer <- Op{CLIENT_CONNECT, channels, resp}
 
 	for {
-		if closed {
+		if connected {
+			select {
+			case event := <-resp:
+				// Forward event to client
+				data := DumpEvent(event)
+				conn.SendData(data)
+			case <-time.After(5 * time.Second):
+				// Send a little noop to the client
+				conn.SendNoop()
+			case <-conn.CloseNotify():
+				self.multiplexer <- Op{CLIENT_DISCONNECT, channels, resp}
+				connected = false
+			}
+		} else {
 			select {
 			case <-resp:
 				// Make sure to discard all the events in the channel before ending
 			case <-time.After(2 * time.Second):
 				// Bye
 				return
-			}
-		} else {
-			select {
-			case event := <-resp:
-				// Forward event to client
-				data, err := DumpEvent(event)
-				if err != nil {
-					// TODO: Handle error
-					log.Println("subscriber:", err)
-				} else {
-					// TODO: Handle error
-					conn.SendData(data)
-				}
-			case <-conn.CloseNotify():
-				self.multiplexer <- Op{CLIENT_DISCONNECT, channels, resp}
-				closed = true
-			case <-time.After(5 * time.Second):
-				// Send a little noop to the client
-				conn.SendNoop()
 			}
 		}
 	}

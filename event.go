@@ -16,6 +16,10 @@ func LoadEvent(data []byte) (e *Event, err error) {
 	return
 }
 
-func DumpEvent(event *Event) (data []byte, err error) {
-	return json.Marshal(event)
+func DumpEvent(event *Event) (data []byte) {
+	data, err := json.Marshal(event)
+	if err != nil {
+		panic("BUG: " + err.Error())
+	}
+	return data
 }

@@ -13,6 +13,7 @@ func NewRedisBroker(addr string) *RedisBroker {
 	return &RedisBroker{addr, REDIS_DISCONNECTED}
 }
 
+// Each Publish initiates a new connection
 func (self *RedisBroker) Publish(event *Event) (err error) {
 	c, err := self.connect()
 	if err != nil {
@@ -20,11 +21,7 @@ func (self *RedisBroker) Publish(event *Event) (err error) {
 	}
 	defer c.Close()
 
-	b, err := DumpEvent(event)
-	if err != nil {
-		return
-	}
-	data := []byte(b)
+	data := DumpEvent(event)
 
 	c.Send("MULTI")
 	c.Send("ZADD", event.Channel, -1*event.Id, data)

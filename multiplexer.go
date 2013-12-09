@@ -93,6 +93,7 @@ func multiplexer(redisAddr string, comm <-chan Op) {
 						}
 						registry[c][op.resp] = true
 
+						// TODO: Put these values into an intermediate buffer
 						// Here we send the backlog we get from redis
 						values, err := redis.Strings(redisC.Do("ZREVRANGE", c, 0, -1))
 						if err != nil {
@@ -100,7 +101,6 @@ func multiplexer(redisAddr string, comm <-chan Op) {
 							// TODO: Deal with the error
 							break
 						}
-						log.Println("multiplexer values:", values)
 						// TODO: If the client disconnects at this point it's annoying.
 						// TODO: It might also slow down the loop if the client is slow
 						//       to receive these messages.
@@ -118,13 +118,14 @@ func multiplexer(redisAddr string, comm <-chan Op) {
 					log.Println("multiplexer: DISCONNECT", op)
 					for _, c := range op.channels {
 						if registry[c] == nil {
-							panic("BUG")
+							panic("BUG: missing registry channel " + c)
 						}
 						delete(registry[c], op.resp)
 						if len(registry[c]) == 0 {
 							redisPSC.Unsubscribe(c)
 							// TODO: Error checking
 							// TODO: Flush local buffer if we have any
+							delete(registry, c)
 						}
 					}
 					// TODO: We might be loosing some events between the disconnect and
@@ -144,13 +145,16 @@ func multiplexer(redisAddr string, comm <-chan Op) {
 					var ev *Event
 					m := msg.(redis.Message)
 					if ev, err = LoadEvent(m.Data); err != nil {
-						// TODO: Handle error
+						// Just log the error, there is an issue in the redis storage
 						log.Println("multiplexer LoadEvent2:", m.Data, err)
 					} else {
-						// TODO: Handle if the channel is not in the map
-						for c := range registry[ev.Channel] {
-							// TODO: A channel can get closed
-							c <- ev
+						targets, ok := registry[ev.Channel]
+						if !ok {
+							log.Println("multiplexer got an event on a unused channel ", ev.Channel)
+						} else {
+							for c, _ := range targets {
+								c <- ev
+							}
 						}
 					}
 				case error:
