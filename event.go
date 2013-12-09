@@ -5,13 +5,14 @@ import (
 )
 
 type Event struct {
-	Id      int64  `json:"id"`
-	Channel string `json:"name"`
-	Data    string `json:"data"`
+	At   int64  `json:"at"`
+	TTL  int    `json:"ttl"`
+	Size int    `json:"size"`
+	Data string `json:"data"`
 }
 
-func NewEvent(id int64, channel string, data string) *Event {
-	return &Event{id, channel, data}
+func NewEvent(at int64, ttl int, size int, data string) *Event {
+	return &Event{at, ttl, size, data}
 }
 
 func LoadEvent(data []byte) (e *Event, err error) {

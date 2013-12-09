@@ -14,7 +14,7 @@ func NewRedisBroker(addr string) *RedisBroker {
 }
 
 // Each Publish initiates a new connection
-func (self *RedisBroker) Publish(event *Event) (err error) {
+func (self *RedisBroker) Publish(channel string, event *Event) (err error) {
 	c, err := self.connect()
 	if err != nil {
 		return
@@ -24,10 +24,10 @@ func (self *RedisBroker) Publish(event *Event) (err error) {
 	data := DumpEvent(event)
 
 	c.Send("MULTI")
-	c.Send("ZADD", event.Channel, -1*event.Id, data)
-	c.Send("ZREMRANGEBYRANK", event.Channel, BUF_SIZE, -1)
-	c.Send("EXPIRE", event.Channel, BUF_EXPIRE)
-	c.Send("PUBLISH", event.Channel, data)
+	c.Send("ZADD", channel, -1*event.At, data)
+	c.Send("ZREMRANGEBYRANK", channel, event.Size, -1)
+	c.Send("EXPIRE", channel, event.TTL)
+	c.Send("PUBLISH", channel, data)
 	_, err = c.Do("EXEC")
 
 	return

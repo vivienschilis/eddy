@@ -21,7 +21,7 @@ const (
 type Op struct {
 	action   int
 	channels []string
-	resp     chan<- *Event
+	resp     chan<- *ChannelEvent
 }
 
 func NewMultiplexer(redisAddr string) chan<- Op {
@@ -36,7 +36,8 @@ func multiplexer(redisAddr string, comm <-chan Op) {
 	var redisPSC redis.PubSubConn
 
 	redisMsg := make(chan interface{})
-	registry := make(map[string]map[chan<- *Event]bool)
+	registry := make(map[string]map[chan<- *ChannelEvent]bool)
+	//buffers := make(map[string]*ChannelBuffer)
 	state := REDIS_DISCONNECTED
 
 	for {
@@ -86,7 +87,7 @@ func multiplexer(redisAddr string, comm <-chan Op) {
 					for _, c := range op.channels {
 						_, ok := registry[c]
 						if !ok {
-							registry[c] = make(map[chan<- *Event]bool)
+							registry[c] = make(map[chan<- *ChannelEvent]bool)
 
 							// TODO: Handle subscription error
 							redisPSC.Subscribe(c)
@@ -110,7 +111,7 @@ func multiplexer(redisAddr string, comm <-chan Op) {
 								// TODO: Handle error
 								log.Println("multiplexer: LoadEvent:", v, err)
 							} else {
-								op.resp <- ev
+								op.resp <- &ChannelEvent{c, ev}
 							}
 						}
 					}
@@ -148,12 +149,13 @@ func multiplexer(redisAddr string, comm <-chan Op) {
 						// Just log the error, there is an issue in the redis storage
 						log.Println("multiplexer LoadEvent2:", m.Data, err)
 					} else {
-						targets, ok := registry[ev.Channel]
+						targets, ok := registry[m.Channel]
 						if !ok {
-							log.Println("multiplexer got an event on a unused channel ", ev.Channel)
+							log.Println("multiplexer got an event on a unused channel ", m.Channel)
 						} else {
+							cev := &ChannelEvent{m.Channel, ev}
 							for c, _ := range targets {
-								c <- ev
+								c <- cev
 							}
 						}
 					}

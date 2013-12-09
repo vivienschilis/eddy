@@ -23,9 +23,14 @@ func (self *PublisherHandler) ServeHTTP(w http.ResponseWriter, req *http.Request
 	channel := req.URL.Query().Get("channel")
 	data := req.URL.Query().Get("data")
 	timestamp := time.Now().UnixNano()
+
+	// TODO: Accept these as parameters
+	size := BUF_SIZE
+	ttl := BUF_EXPIRE
+
 	// TODO: Fail if we don't have any channel or data
 
-	err = self.broker.Publish(NewEvent(timestamp, channel, data))
+	err = self.broker.Publish(channel, NewEvent(timestamp, ttl, size, data))
 	if err != nil {
 		log.Println("publisher: ", err)
 		w.WriteHeader(500)

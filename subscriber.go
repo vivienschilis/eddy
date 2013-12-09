@@ -59,16 +59,17 @@ func (self *SubscriberHandler) ServeHTTP(w http.ResponseWriter, req *http.Reques
 	channels := strings.Split(req.URL.Query().Get("channels"), ",") // TODO: Fail if no channels are selected ?
 	connected := true
 	conn := SubscriberConn{w, f, cn}
-	resp := make(chan *Event)
+	resp := make(chan *ChannelEvent)
 
 	self.multiplexer <- Op{CLIENT_CONNECT, channels, resp}
 
 	for {
 		if connected {
 			select {
-			case event := <-resp:
+			case cev := <-resp:
 				// Forward event to client
-				data := DumpEvent(event)
+				data := DumpEvent(cev.Event)
+				// TODO: Send the channel as well
 				conn.SendData(data)
 			case <-time.After(5 * time.Second):
 				// Send a little noop to the client
