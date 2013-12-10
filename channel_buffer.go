@@ -83,6 +83,7 @@ func (self *ChannelBuffer) Since(since int64) []*Event {
 	}
 
 	list := make([]*Event, 0, len(self.buffer))
+	// FIXME: Sort the list
 	for at, e := range self.buffer {
 		if at > since {
 			list = append(list, e)
