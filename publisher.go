@@ -7,14 +7,14 @@ import (
 )
 
 type PublisherHandler struct {
-	broker Broker
+	pub BrokerPublisher
 }
 
 const BUF_EXPIRE = 3600
 const BUF_SIZE = 10
 
-func NewPublisherHandler(broker Broker) *PublisherHandler {
-	return &PublisherHandler{broker}
+func NewPublisherHandler(pub BrokerPublisher) *PublisherHandler {
+	return &PublisherHandler{pub}
 }
 
 func (self *PublisherHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -30,7 +30,7 @@ func (self *PublisherHandler) ServeHTTP(w http.ResponseWriter, req *http.Request
 
 	// TODO: Fail if we don't have any channel or data
 
-	err = self.broker.Publish(channel, NewEvent(timestamp, ttl, size, data))
+	err = self.pub.Publish(channel, NewEvent(timestamp, ttl, size, data))
 	if err != nil {
 		log.Println("publisher: ", err)
 		w.WriteHeader(500)
