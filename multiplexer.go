@@ -29,7 +29,7 @@ func multiplexer(sub BrokerSubscriber, comm <-chan Op) {
 
 	for {
 		select {
-		case state := <- sub.StateChange():
+		case state := <-sub.StateChange():
 			switch state {
 			case BROKER_CONNECTED:
 				// Re-subscribe
@@ -82,6 +82,7 @@ func multiplexer(sub BrokerSubscriber, comm <-chan Op) {
 						sub.Unsubscribe(c)
 					}
 				}
+				close(op.resp)
 			}
 		case ce := <-sub.ChannelEvent():
 			targets, ok := registry[ce.Channel]
