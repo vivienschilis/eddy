@@ -56,7 +56,8 @@ func (self *SubscriberHandler) ServeHTTP(w http.ResponseWriter, req *http.Reques
 	w.Header().Set("Connection", "keep-alive")
 	w.WriteHeader(200)
 
-	channels := strings.Split(req.URL.Query().Get("channels"), ",") // TODO: Fail if no channels are selected ?
+	// TODO: Fail if no channels are selected ?
+	channels := strings.Split(req.URL.Query().Get("channels"), ",")
 	connected := true
 	conn := SubscriberConn{w, f, cn}
 	resp := make(chan *ChannelEvent)
@@ -64,28 +65,26 @@ func (self *SubscriberHandler) ServeHTTP(w http.ResponseWriter, req *http.Reques
 	self.multiplexer <- Op{CLIENT_CONNECT, channels, resp}
 
 	for {
-		if connected {
-			select {
-			case cev := <-resp:
+		select {
+		case ce, ok := <-resp:
+			if ok {
 				// Forward event to client
-				data := DumpEvent(cev.Event)
+				data := DumpEvent(ce.Event)
 				// TODO: Send the channel as well
 				conn.SendData(data)
-			case <-time.After(5 * time.Second):
-				// Send a little noop to the client
-				conn.SendNoop()
-			case <-conn.CloseNotify():
-				self.multiplexer <- Op{CLIENT_DISCONNECT, channels, resp}
+			} else {
+				// Multiplexer got the message and disconnected us
 				connected = false
 			}
-		} else {
-			select {
-			case <-resp:
-				// Make sure to discard all the events in the channel before ending
-			case <-time.After(2 * time.Second):
-				// Bye
-				return
-			}
+		case <-time.After(5 * time.Second):
+			// Send a little noop to the client
+			// This is not part of the SSE spec
+			conn.SendNoop()
+		case <-conn.CloseNotify():
+			self.multiplexer <- Op{CLIENT_DISCONNECT, channels, resp}
+		}
+		if !connected {
+			return
 		}
 	}
 }
