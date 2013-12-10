@@ -61,7 +61,7 @@ func multiplexer(sub BrokerSubscriber, comm <-chan Op) {
 					// TODO: It might also slow down the loop if the client is slow
 					//       to receive these messages.
 					// The buffer might flush itself if it's too old
-					for _, ev := range b.Since(0) {
+					for _, ev := range b.All() {
 						op.resp <- &ChannelEvent{c, ev}
 					}
 				}

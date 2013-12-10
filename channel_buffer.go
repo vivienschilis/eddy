@@ -1,6 +1,7 @@
 package main
 
 import (
+	"sort"
 	"time"
 )
 
@@ -8,8 +9,7 @@ import (
 // Performance-wise, the buffers are supposed to be quite small so
 //  map vs [] doesn't really matter.
 type ChannelBuffer struct {
-	buffer map[int64]*Event
-	last   *Event
+	buf []*Event
 }
 
 // FIXME: Once a buffer has grown, the buffer will never resize down
@@ -22,83 +22,96 @@ func NewChannelBuffer() *ChannelBuffer {
 // Not really a push, events might arrive at any order
 //
 // Returns true if the event was added to the buffer
+//
+// TODO: I'm sure there is a more efficient algorithm out there
 func (self *ChannelBuffer) Add(e *Event) bool {
-	// FIXME: Handle case where two different events have the same timestamp ?
-	if self.buffer[e.At] != nil {
-		return false
-	}
-
 	if e.Size <= 0 {
 		panic("BUG: The event.Size must be greater than zero")
 	}
 
-	if self.last == nil || e.At > self.last.At {
-		self.last = e
+	if e.TTL <= 0 {
+		panic("BUG: The event.TTL must be greater than zero")
+	}
+
+	for _, ev := range self.buf {
+		// FIXME: Compare events not by pointer
+		if ev == e {
+			return false
+		}
+	}
+
+	newest := self.newest()
+	if newest == nil || e.At > newest.At {
+		newest = e
 	}
 
 	// Skip adding the event if it's too old and the buffer has grown
-	if len(self.buffer) >= self.last.Size {
-		first := self.Oldest()
-		if first != nil && first.At > e.At {
-			if self.last == e {
-				panic("BUG: cannot be last with a full buffer")
+	if len(self.buf) >= newest.Size {
+		for _, ev := range self.buf[len(self.buf)-newest.Size:] {
+			if e.At < ev.At {
+				return false
 			}
-			return false
 		}
 	}
 
 	// Remove the last item in the buffer
 	// Also make place for the new item to avoid growing the buffer unecessarily
-	for len(self.buffer) > self.last.Size {
-		ev := self.Oldest()
-		if ev == nil {
-			panic("BUG, ev should not be nil")
-		}
-		// Possible weird corner-case ?
-		if ev.At > e.At {
-			return false
-		}
-		delete(self.buffer, ev.At)
+	if len(self.buf) >= newest.Size {
+		self.buf = self.buf[:newest.Size-1]
 	}
 
-	self.buffer[e.At] = e
+	// Finally. Add our event
+	self.buf = append(self.buf, e)
+
+	// Make sure it's in order
+	sort.Sort(self)
 
 	return true
 }
 
-func (self *ChannelBuffer) Oldest() *Event {
-	var first *Event
-	for at, e := range self.buffer {
-		if first == nil || first.At > at {
-			first = e
-		}
+func (self *ChannelBuffer) newest() *Event {
+	if len(self.buf) == 0 {
+		return nil
 	}
-	return first
+	return self.buf[0]
 }
 
-func (self *ChannelBuffer) Since(since int64) []*Event {
+func (self *ChannelBuffer) oldest() *Event {
+	if len(self.buf) == 0 {
+		return nil
+	}
+	return self.buf[len(self.buf)-1]
+}
+
+func (self *ChannelBuffer) All() []*Event {
 	if self.hasExpired() {
 		self.flush()
 		return nil
 	}
 
-	list := make([]*Event, 0, len(self.buffer))
-	// FIXME: Sort the list
-	for at, e := range self.buffer {
-		if at > since {
-			list = append(list, e)
-		}
-	}
-	return list
+	return self.buf
+}
+
+func (self *ChannelBuffer) Len() int {
+	return len(self.buf)
+}
+
+func (self *ChannelBuffer) Less(i, j int) bool {
+	return self.buf[i].At > self.buf[j].At
+}
+
+func (self *ChannelBuffer) Swap(i, j int) {
+	x := self.buf[i]
+	self.buf[i] = self.buf[j]
+	self.buf[j] = x
 }
 
 func (self *ChannelBuffer) flush() {
-	self.last = nil
-	self.buffer = make(map[int64]*Event)
+	self.buf = []*Event{}
 }
 
 func (self *ChannelBuffer) hasExpired() bool {
-	e := self.last
+	e := self.newest()
 	if e == nil {
 		return false
 	}
