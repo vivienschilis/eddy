@@ -84,9 +84,8 @@ func (self *ChannelBuffer) oldest() *Event {
 }
 
 func (self *ChannelBuffer) All() []*Event {
-	if self.hasExpired() {
+	if self.hasExpired(time.Now()) {
 		self.flush()
-		return nil
 	}
 
 	return self.buf
@@ -110,10 +109,10 @@ func (self *ChannelBuffer) flush() {
 	self.buf = []*Event{}
 }
 
-func (self *ChannelBuffer) hasExpired() bool {
+func (self *ChannelBuffer) hasExpired(now time.Time) bool {
 	e := self.newest()
 	if e == nil {
 		return false
 	}
-	return e.At+(int64(e.TTL)*10e6) > time.Now().UnixNano()
+	return now.After(time.Unix(0, e.At).Add(time.Duration(e.TTL) * time.Second))
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"testing"
+	"time"
 )
 
 func TestChannelBuffer(t *testing.T) {
@@ -64,3 +65,35 @@ func TestChannelBuffer(t *testing.T) {
 		t.Error("d")
 	}
 }
+
+func TestChannelBufferExpiry(t *testing.T) {
+	TTL := 1
+	t1 := time.Unix(1337, 0)
+	t2 := time.Unix(1338, 0)
+	t3 := time.Unix(1900, 0)
+	c := NewChannelBuffer()
+
+	if c.hasExpired(t1) {
+		t.Error("oops, should never expired when empty")
+	}
+
+	c.Add(NewEvent(t1.UnixNano(), TTL, 2, ""))
+	c.Add(NewEvent(t2.UnixNano(), TTL, 2, ""))
+
+	if c.Len() != 2 {
+		t.Error("len is now right")
+	}
+
+	if c.hasExpired(t1) {
+		t.Error("oops t1")
+	}
+
+	if c.hasExpired(t2) {
+		t.Error("oops t2")
+	}
+
+	if !c.hasExpired(t3) {
+		t.Error("oops t3")
+	}
+}
+
